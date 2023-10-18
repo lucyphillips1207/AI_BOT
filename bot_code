@@ -1,0 +1,89 @@
+!pip install cohere
+!pip install tiktoken
+!pip install --upgrade langchain openai -q
+!pip install unstructured -q
+!pip install unstructured[local-inference] -q
+!pip install detectron2@git+https://github.com/facebookresearch/detectron2.git@v0.6#egg=detectron2 -q
+!pip install pinecone-client -q
+
+import openai
+import pinecone
+import os
+os.environ["OPENAI_API_KEY"] = "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"
+from langchain.document_loaders import DirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.vectorstores import Pinecone
+from langchain.llms import OpenAI
+from langchain.chains.question_answering import load_qa_chain
+
+# Load in documents
+
+directory = '/content/drive/MyDrive/Sample/Sample'   #keep multiple files (.txt, .pdf) in data folder.
+
+def load_docs(directory):
+  loader = DirectoryLoader(directory)
+  documents = loader.load()
+  return documents
+
+documents = load_docs(directory)
+len(documents)
+
+# Split documents into chunks 
+
+def split_docs(documents, chunk_size=1000, chunk_overlap=20):
+  text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+  docs = text_splitter.split_documents(documents)
+  return docs
+
+docs = split_docs(documents)
+print(len(docs))
+
+# Embedding documents with Open AI
+
+embeddings = OpenAIEmbeddings(model_name="ada")
+
+query_result = embeddings.embed_query("Hello world")
+len(query_result)
+
+# Vector search with pinecone
+
+pinecone.init(
+    api_key="b1232b0d-a0e0-4e17-849e-3de6cdf290c5",
+    environment="gcp-starter"
+)
+
+index_name = "el-chatbot"
+
+index = Pinecone.from_documents(docs, embeddings, index_name=index_name)
+
+# Finding similar documents
+
+def get_similiar_docs(query, k=4, score=False):  # we can control k value to get no. of context with respect to question.
+  if score:
+    similar_docs = index.similarity_search_with_score(query, k=k)
+  else:
+    similar_docs = index.similarity_search(query, k=k)
+  return similar_docs
+
+query = "What do the documents tell us about satcoms"
+similar_docs = get_similiar_docs(query,score = True)
+similar_docs
+
+# Question answering using LangChain and OpenAI LLM
+
+model_name = "gpt-3.5-turbo"
+llm = OpenAI(model_name=model_name)
+
+chain = load_qa_chain(llm, chain_type="stuff") #we can use map_reduce chain_type also.
+
+def get_answer(query):
+  similar_docs = get_similiar_docs(query)
+  print(similar_docs)
+  answer = chain.run(input_documents=similar_docs, question=query)
+  return answer
+
+
+
+
+
